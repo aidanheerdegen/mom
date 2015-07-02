@@ -19,9 +19,9 @@
 #######################################################################
 
   set echo
-  set platform      = "ncrc.intel"                                # A unique identifier for your platform
+  set platform      = "nci"                                # A unique identifier for your platform
 
-#  set ocean_only_dst_grid                  # comment this if the $dst_grid contains exchange grid information
+  set ocean_only_dst_grid                  # comment this if the $dst_grid contains exchange grid information
                                             # uncomment this if the $dst_grid only contains ocean grid information.
 			                    # $make_xgrids only accept ocean only grid as the -o option.
  
@@ -37,8 +37,10 @@
 # needed data set and field name of the runoff data
 # NOTE: Users must change the following according to their need. These particular values are here for testing purposes only.
 #
-  set dst_grid      = $FMS_ARCHIVE/mom4/mom4p1/memphis/mom4_om1p5/preprocessing/om1p5_grid_spec.nc
-  set src_data      = $FMS_ARCHIVE/mom4/mom4p1/omsk/om3_core1/INPUT/RUNOFF.nc
+  # set dst_grid      = $FMS_ARCHIVE/mom4/mom4p1/memphis/mom4_om1p5/preprocessing/om1p5_grid_spec.nc
+  # set src_data      = $FMS_ARCHIVE/mom4/mom4p1/omsk/om3_core1/INPUT/RUNOFF.nc
+  set dst_grid      = /g/data1/v45/mom/sis01_mosaic/grid_spec.nc
+  set src_data      = ~/v45_short/IAF/river_runoff/runoff.daitren.iaf.10FEB2011.nc
   set src_fld_name  = 'RUNOFF'
 
 #############################################################################

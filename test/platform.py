@@ -2,8 +2,8 @@ run_scripts = {}
 run_scripts['nci'] = """
 #!/bin/csh -f
 
-#PBS -P x77
-#PBS -q normal
+#PBS -P v45
+#PBS -q express
 #PBS -l walltime={walltime}
 #PBS -l ncpus={ncpus}
 #PBS -l mem={mem}

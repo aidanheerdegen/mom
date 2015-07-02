@@ -272,6 +272,8 @@ subroutine init_land_with_xgrid &
   ! [1] get land grid corners and area of land from the grid description file
   ! open grid description file
   ! for mosaic grid, grid area will be calculated based on exchange grid and grid cell.
+
+! write(errunit,*) 'DEBUG :: xgrid'
   
 #ifndef LAND_GRID_FROM_ATMOS
   if( field_exist(grid_file, 'AREA_LND') ) then
@@ -508,6 +510,8 @@ subroutine init_land_with_area &
   integer :: id_lon, id_lat  ! IDs of land diagnostic axes
   integer :: ntrace, ntprog, ntdiag, ntfamily ! numbers of tracers
   integer :: ntiles ! number of tiles for land mosaic
+
+! write(errunit,*) 'DEBUG :: area'
 
   module_is_initialized = .TRUE.
 

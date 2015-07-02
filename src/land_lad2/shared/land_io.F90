@@ -1,7 +1,7 @@
 module land_io_mod
 
 use constants_mod,     only : PI
-use fms_mod,           only : file_exist, error_mesg, FATAL, stdlog, mpp_pe, &
+use fms_mod,           only : file_exist, error_mesg, FATAL, WARNING, stdlog, mpp_pe, &
      mpp_root_pe, write_version_number, string, check_nml_error, close_file
 
 #ifdef INTERNAL_FILE_NML
@@ -360,6 +360,7 @@ subroutine read_field_N_3D(filename, varname, lon, lat, data, interp)
   if(iret/=NF_NOERR) then
      call error_mesg('read_field','Can''t open netcdf file "'//trim(filename)//'"',FATAL)
   endif
+  print *,'netcdf file:',trim(filename)
   call read_field_I_3D(ncid, varname, lon, lat, data, interp)
   __NF_ASRT__( nf_close(ncid) )
 
@@ -435,6 +436,7 @@ subroutine read_field_I_3D(ncid, varname, lon, lat, data, interp)
   __NF_ASRT__(nfu_get_valid_range(ncid,varname,v))
   ! read input data
   __NF_ASRT__( nfu_get_var(ncid,varname,x) ) ! assuming real is real*8
+  ! call error_mesg(module_name, 'DEBUG :: '//varname,WARNING)
   mask = nfu_is_valid(x,v)
   rmask = 1.0
   where(.not.mask) rmask = 0.0

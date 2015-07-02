@@ -1283,6 +1283,7 @@ contains
                            //trim(walldate)//' '//trim(walltime)
         endif
         call mpp_clock_begin(id_land_model_init)
+        write(errunit,*) 'DEBUG :: inited mpp clock'
         call land_model_init( Atmos_land_boundary, Land, Time_init, Time, &
              Time_step_atmos, Time_step_cpld )
         call mpp_clock_end(id_land_model_init)

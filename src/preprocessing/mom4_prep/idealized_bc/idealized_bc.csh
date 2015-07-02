@@ -18,12 +18,13 @@
 #######################################################################
 
   set echo
-  set platform     = "ncrc.intel"                           # A unique identifier for your platform
+  set platform     = "nci"                           # A unique identifier for your platform
   set npes         = 1                                      # number of processors
 #
 # input data file and destination grid
 #
-  set grid_spec_file  = $cwd:h:h/generate_grids/ocean/workdir/ocean_grid.nc  # destination grid
+  # set grid_spec_file  = $cwd:h:h/generate_grids/ocean/workdir/ocean_grid.nc  # destination grid
+  set grid_spec_file  = /g/data1/v45/mom/sis01_mosaic/grid_spec.nc
 #
   set root         = $cwd:h:h:h:h                         # The directory that contains src/ and bin/
 #

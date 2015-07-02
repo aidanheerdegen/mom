@@ -27,6 +27,8 @@ class ModelTestSetup(object):
         the compute nodes may not have Internet access. 
         """
 
+	# return 0
+
         os.chdir(self.archive_dir)
 
         input = '{}.input.tar.gz'.format(exp)
@@ -148,9 +150,9 @@ class ModelTestSetup(object):
         stdout, stderr = self.get_output(fo, fe)
 
         # Clean up temporary files. 
-        os.remove(stdout_file)
-        os.remove(stderr_file)
-        os.remove(run_file)
+        # os.remove(stdout_file)
+        # os.remove(stderr_file)
+        # os.remove(run_file)
 
         # Change back to test dir. 
         os.chdir(self.my_dir)
