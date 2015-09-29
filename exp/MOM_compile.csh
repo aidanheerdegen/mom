@@ -53,7 +53,7 @@ set executable    = $root/exec/$platform/$type/fms_$type.x      # executable cre
 set mppnccombine  = $root/bin/mppnccombine.$platform  # path to executable mppnccombine
 set mkmfTemplate  = $root/bin/mkmf.template.$platform # path to template for your platform
 set mkmf          = $root/bin/mkmf                    # path to executable mkmf
-set cppDefs  = ( "-Duse_netCDF -Duse_netCDF3 -Duse_libMPI -DUSE_OCEAN_BGC -DENABLE_ODA -DSPMD -DLAND_BND_TRACERS" )
+set cppDefs  = ( "-Duse_netCDF -Duse_libMPI -DUSE_OCEAN_BGC -DENABLE_ODA -DSPMD -DLAND_BND_TRACERS" )
 #On Altrix systems you may include "-Duse_shared_pointers -Duse_SGI_GSM" in cppDefs for perfomance.
 #These are included in the GFDL configuration of the model.
 

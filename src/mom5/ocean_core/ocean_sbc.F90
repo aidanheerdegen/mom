@@ -807,6 +807,7 @@ logical :: use_ideal_runoff               =.false.
 logical :: use_ideal_calving              =.false.
 logical :: read_stokes_drift              =.false.
 logical :: do_langmuir                    =.false.
+logical :: temp_ice_runoff_feedback       =.false.
 
 real    :: constant_sss_for_restore       = 35.0
 real    :: constant_sst_for_restore       = 12.0
@@ -852,7 +853,7 @@ namelist /ocean_sbc_nml/ temp_restore_tscale, salt_restore_tscale, salt_restore_
          temp_correction_scale, salt_correction_scale, tau_x_correction_scale, tau_y_correction_scale, do_bitwise_exact_sum, &
          sbc_heat_fluxes_const, sbc_heat_fluxes_const_value, sbc_heat_fluxes_const_seasonal,                                 &
          use_constant_sss_for_restore, constant_sss_for_restore, use_constant_sst_for_restore, constant_sst_for_restore,     &
-         use_ideal_calving, use_ideal_runoff, constant_hlf, constant_hlv, read_stokes_drift, do_langmuir
+         use_ideal_calving, use_ideal_runoff, constant_hlf, constant_hlv, read_stokes_drift, do_langmuir, temp_ice_runoff_feedback       
 
 namelist /ocean_sbc_ofam_nml/ restore_mask_ofam, river_temp_ofam
 
@@ -3003,6 +3004,11 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
   integer :: tau, taup1, n, i, j, k, ii, jj
   integer :: day, sec 
 
+  ! MATT variables
+  real, save :: matt_depth_top = 100, matt_depth_bot = 400, matt_max_lat = -60., matt_runoff_limit = 0.00001
+  real :: old_runoff, new_runoff
+
+  logical, dimension(isd:ied,jsd:jed) :: matt_mask
 
   integer :: stdoutunit 
   stdoutunit=stdout() 
@@ -3255,6 +3261,50 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
             calving(ii,jj) = Ice_ocean_boundary%calving(i,j)*Grd%tmask(ii,jj,1)
          enddo
       enddo
+! MATT WATER
+      if(temp_ice_runoff_feedback) then       
+
+         ! Temperature field: T_prog(index_temp)%field(i,j,level,tau)
+
+         
+         ! depth = min(Grd%ht(i,j),river_insertion_thickness)        ! be sure not to discharge river content into rock 
+         ! nz    = min(Grd%kmt(i,j),floor(frac_index(depth,Grd%zw))) ! number of k-levels into which discharge rivers
+         ! nz    = max(1,nz)                                         ! make sure have at least one cell to discharge into
+         
+         old_runoff = 0.
+         matt_mask = .false.
+         ! Do slow looping, as we want to check if longitude is within our cutoff, and then iterate over latitude 
+         LON: do i=isc+1,iec-1
+            LAT: do j=jsc+1,jec-1
+               ! As soon as cell is above about latitude cutoff don't bother checking the rest
+               if (Grd%yt(i,j) > matt_max_lat) cycle LON
+               if (runoff(i,j) > 0) then
+                  matt_mask(i,j) = .true.
+                  old_runoff = old_runoff + runoff(i,j)
+               end if
+               ! Check we meet the runoff criteria, we're in an ocean cell, and an adjacent cell is land
+               if (runoff(i,j) > matt_runoff_limit .and. Grd%kmt(i,j) > 0 .and. ( &
+                    (Grd%kmt(i,j-1) == 0) .or. (Grd%kmt(i,j+1) == 0) .or. &
+                    (Grd%kmt(i-1,j) == 0) .or. (Grd%kmt(i+1,j) == 0) )) then
+                  ! write(stdoutunit,*) &
+                  !      '     Matt => ',i,j,Grd%yt(i,j),matt_max_lat
+                  runoff(i,j)  = 2*Ice_ocean_boundary%runoff(i,j)*Grd%tmask(i,j,1)
+               end if
+            enddo LAT
+         enddo LON
+
+         new_runoff = sum(runoff, mask=matt_mask)
+
+         ! Normalise total runoff to original total
+         if (new_runoff > 0.) then
+            where (matt_mask)
+               ! runoff(isc:iec,jsc:jec) = runoff(isc:iec,jsc:jec)*(old_runoff/new_runoff)
+               runoff = runoff*(old_runoff/new_runoff)
+            end where
+         end if
+         
+      end if
+! END MATT WATER
       if(use_ideal_runoff) then
           do j=jsc,jec
              do i=isc,iec
