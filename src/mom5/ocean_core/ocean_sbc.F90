@@ -725,6 +725,8 @@ real, allocatable, dimension(:,:) :: betasfc       ! surface saline contraction 
 real, allocatable, dimension(:,:,:) :: sslope
 #endif
 
+! Matt
+logical, allocatable, dimension(:,:) :: runoff_mask, runoff_no_interp_mask
 
 ! ice-ocean-boundary fields are allocated using absolute
 ! indices (regardless of whether ocean allocations are static)
@@ -1479,6 +1481,13 @@ subroutine ocean_sbc_init(Grid, Domain, Time, T_prog, T_diag, &
   ! initialize diagnostic manager fields 
   call ocean_sbc_diag_init(Time, Dens, T_prog)
 
+  ! MATT WATER
+  if(temp_ice_runoff_feedback) then       
+      write(stdoutunit,*) '==>Note: Performing temperature induced ice runoff feedback (Matt).'
+     ! Initialise masks for which we will calculate enhanced runoff
+     allocate(runoff_mask(isd:ied,jsd:jed))
+     allocate(runoff_no_interp_mask(isd:ied,jsd:jed))
+  end if
 
   return
 
@@ -3005,10 +3014,11 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
   integer :: day, sec 
 
   ! MATT variables
-  real, save :: matt_depth_top = 100, matt_depth_bot = 400, matt_max_lat = -60., matt_runoff_limit = 0.00001
-  real :: old_runoff, new_runoff
+  real :: new_runoff, effective_temp, total_runoff
+  integer :: bot_level, nlevels
 
-  logical, dimension(isd:ied,jsd:jed) :: matt_mask
+  real :: matt_depth_top = 100, matt_depth_bot = 400, matt_max_lat = -60., matt_runoff_limit = 0.00001
+  integer :: matt_level_top = 10, matt_level_bot = 23
 
   integer :: stdoutunit 
   stdoutunit=stdout() 
@@ -3264,45 +3274,55 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
 ! MATT WATER
       if(temp_ice_runoff_feedback) then       
 
-         ! Temperature field: T_prog(index_temp)%field(i,j,level,tau)
+         runoff_mask = .FALSE.
+         runoff_no_interp_mask = .FALSE.
 
-         
-         ! depth = min(Grd%ht(i,j),river_insertion_thickness)        ! be sure not to discharge river content into rock 
-         ! nz    = min(Grd%kmt(i,j),floor(frac_index(depth,Grd%zw))) ! number of k-levels into which discharge rivers
-         ! nz    = max(1,nz)                                         ! make sure have at least one cell to discharge into
-         
-         old_runoff = 0.
-         matt_mask = .false.
+         new_runoff = 0.
+         total_runoff = 0.
+
          ! Do slow looping, as we want to check if longitude is within our cutoff, and then iterate over latitude 
          LON: do i=isc+1,iec-1
             LAT: do j=jsc+1,jec-1
                ! As soon as cell is above about latitude cutoff don't bother checking the rest
                if (Grd%yt(i,j) > matt_max_lat) cycle LON
-               if (runoff(i,j) > 0) then
-                  matt_mask(i,j) = .true.
-                  old_runoff = old_runoff + runoff(i,j)
-               end if
-               ! Check we meet the runoff criteria, we're in an ocean cell, and an adjacent cell is land
-               if (runoff(i,j) > matt_runoff_limit .and. Grd%kmt(i,j) > 0 .and. ( &
-                    (Grd%kmt(i,j-1) == 0) .or. (Grd%kmt(i,j+1) == 0) .or. &
-                    (Grd%kmt(i-1,j) == 0) .or. (Grd%kmt(i+1,j) == 0) )) then
-                  ! write(stdoutunit,*) &
-                  !      '     Matt => ',i,j,Grd%yt(i,j),matt_max_lat
-                  runoff(i,j)  = 2*Ice_ocean_boundary%runoff(i,j)*Grd%tmask(i,j,1)
+               ! Check we have runoff and we're in an ocean cell
+               if (runoff(i,j) > 0 .and. Grd%kmt(i,j) > 0) then
+                  runoff_mask(i,j) = .true.
+                  total_runoff = total_runoff + runoff(i,j)
+                  ! Check the lower runoff limit
+                  if (runoff(i,j) > matt_runoff_limit) then
+                     ! If depth greater than our minimum (top level, depth is positive) then mark
+                     ! as not requiring interpolation
+                     if (Grd%kmt(i,j) > matt_level_top) then
+                        runoff_no_interp_mask = .FALSE.
+                        bot_level = min(matt_level_bot,Grd%kmt(i,j))
+                        nlevels = bot_level - matt_level_top + 1
+                        
+                        ! Find average temperature of the water column from matt_level_top down to bot_level
+                        effective_temp = sum(T_prog(index_temp)%field(i,j,matt_level_top:bot_level,tau))/real(nlevels)
+                        
+                        runoff(i,j) = (0.5/(4*Grd%dyt(i,j))) * (effective_temp + 2.1) ** (4./3.) 
+                        
+                        ! print *,i,j,matt_level_top, bot_level, nlevels, effective_temp, runoff(i,j)
+                        
+                     end if
+                  end if
+                  new_runoff = new_runoff + runoff(i,j)
                end if
             enddo LAT
          enddo LON
 
-         new_runoff = sum(runoff, mask=matt_mask)
+         write(stdoutunit,*) '==>Note: (Matt). total_runoff_mask: ',count(runoff_mask)
+         write(stdoutunit,*) '==>Note: (Matt). total_runoff: ',total_runoff
+         write(stdoutunit,*) '==>Note: (Matt). new_runoff: ',new_runoff
 
          ! Normalise total runoff to original total
          if (new_runoff > 0.) then
-            where (matt_mask)
-               ! runoff(isc:iec,jsc:jec) = runoff(isc:iec,jsc:jec)*(old_runoff/new_runoff)
-               runoff = runoff*(old_runoff/new_runoff)
+            where (runoff_mask)
+               runoff = runoff*(total_runoff/new_runoff)
             end where
          end if
-         
+
       end if
 ! END MATT WATER
       if(use_ideal_runoff) then
