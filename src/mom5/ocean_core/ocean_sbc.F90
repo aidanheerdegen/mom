@@ -5795,7 +5795,6 @@ subroutine ocean_sbc_diag(Time, Velocity, Thickness, Dens, T_prog, Ice_ocean_bou
      call mpp_sum(matt_total_new_runoff)
 
      if (matt_total_new_runoff > 0) then
-
         used = send_data (id_temp_runoff_feeback_scale, real(matt_total_runoff)/real(matt_total_new_runoff), Time%model_time)
      end if
 
