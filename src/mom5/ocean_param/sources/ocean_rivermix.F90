@@ -67,25 +67,6 @@ module ocean_rivermix_mod
 !  solid runoff. Default calving_insertion_thickness=0.0 (all in top).
 !  </DATA>
 !
-!  <DATA NAME="mix_south_of" TYPE="real" UNITS="degrees N">
-!  Latitude south of which a different mixing depth may be applied
-!  through runoff_insertion_thickness_S (e.g. to simulate basal melting
-!  around antarctica). NOTE: Scheme only applied to liquid runoff and if 
-!  discharge_combine_runoff_calve=.false.
-!  NOTE: currently only available for insertion_thickness not
-!  diffusion_thickness...
-!  Default mix_south_of=-90.0
-!  </DATA>    KS
-!  <DATA NAME="runoff_insertion_thickness_S" TYPE="real" UNITS="meter">
-!  Thickness of the column south of mix_south_of over which to insert
-!  tracers carried by liquid runoff. 
-!  Default runoff_insertion_thickness_S=0.0 (all in top).
-!  </DATA>    KS
-!  <DATA NAME="specify_runoff_south_temp_zero" TYPE="logical">
-!  For specifying the southern runoff temp to zero
-!  Default specify_runoff_south_temp=.false.
-!  </DATA>    KS
-!
 !  <DATA NAME="river_diffusion_thickness" TYPE="real" UNITS="meter">
 !  Thickness of the column over which to diffuse tracers from 
 !  rivers. 
@@ -164,10 +145,6 @@ real    :: runoff_insertion_thickness=0.0  ! static thickness (m) of ocean colum
                                            ! actual thickness is based on model grid spacing. min thickness=dtz(1).
 real    :: calving_insertion_thickness=0.0 ! static thickness (m) of ocean column where discharge solid runoff.
                                            ! actual thickness is based on model grid spacing. min thickness=dtz(1).
-
-real    :: mix_south_of=-90.0              !latitude south of which runoff_insertion_thickness_S is applied KS
-real    :: runoff_insertion_thickness_S=0.0  ! static thickness (m) of ocean applied south of mix_south_of   KS
-logical :: specify_runoff_south_temp_zero=.false. !to specify constant temp for southern runoff KS
 
 real    :: river_diffusion_thickness=0.0 ! static thickness (m) of ocean column where diffuse tracer at river mouths.    
                                          ! actual thickness is based on model grid spacing. min thickness=dtz(1).      
@@ -382,15 +359,13 @@ logical :: debug_this_module_heat=.false.
 logical :: module_is_initialized = .FALSE.
 logical :: use_this_module       = .true.
 
-! KS last 3 inputs
 namelist /ocean_rivermix_nml/ use_this_module, debug_this_module,   &
          debug_all_in_top_cell, debug_this_module_heat,             &
          river_diffuse_temp, river_diffuse_salt,                    & 
          river_diffusion_thickness, river_diffusivity,              &
          discharge_combine_runoff_calve, river_insertion_thickness, &
          runoff_insertion_thickness, calving_insertion_thickness,   &
-         do_bitwise_exact_sum, mix_south_of,                        & 
-         runoff_insertion_thickness_S, specify_runoff_south_temp_zero
+         do_bitwise_exact_sum
 
 contains
 
@@ -958,8 +933,7 @@ end subroutine river_discharge_tracer
 ! </DESCRIPTION>
 !
 subroutine runoff_calving_discharge_tracer (Time, Thickness, T_prog, &
-           river, insertion_thickness, runoff_type) 
- !KS last two inputs
+           river, insertion_thickness, runoff_type)
 
   type(ocean_time_type),          intent(in)    :: Time
   type(ocean_thickness_type),     intent(in)    :: Thickness
@@ -1011,16 +985,6 @@ subroutine runoff_calving_discharge_tracer (Time, Thickness, T_prog, &
             nz    = min(Grd%kmt(i,j),floor(frac_index(depth,Grd%zw))) ! number of k-levels into which discharge rivers
             nz    = max(1,nz)                                         ! make sure have at least one cell to discharge into
 
-            ! KS changes from here...
-            if(runoff_type==1) then   !only apply latitude dependence to liquid runoff
-               if(mix_south_of>Grd%yt(i,j)) then
-                   depth = min(Grd%ht(i,j),runoff_insertion_thickness_S)              
-                   nz    = min(Grd%kmt(i,j),floor(frac_index(depth,Grd%zw))) 
-                   nz    = max(1,nz)
-               endif
-            endif
-
-
             ! determine fractional thicknesses of grid cells 
             thkocean = 0.0
             do k=1,nz
@@ -1063,23 +1027,8 @@ subroutine runoff_calving_discharge_tracer (Time, Thickness, T_prog, &
 !  !        !
 !  xxxxxxxxxx               
 
-               ! KS specify runoff tracer flux, but its looping through n, so T
-               ! and S!! specify n 
-               !if(runoff_type==1) then 
-               !   tracer_flux(i,j) = T_prog(n)%runoff_tracer_flux(i,j)
-               !else
-               ! Note, runoff temp diagnostics not updated to account for this
-               ! change!
                if(runoff_type==1) then 
-                  if(specify_runoff_south_temp_zero.and.(n==index_temp)) then
-                      if(mix_south_of>Grd%yt(i,j)) then
-                          tracer_flux(i,j) = 0.0
-                      else
-                          tracer_flux(i,j) = T_prog(n)%runoff_tracer_flux(i,j)
-                      endif
-                  else
-                      tracer_flux(i,j) = T_prog(n)%runoff_tracer_flux(i,j)
-                  endif
+                  tracer_flux(i,j) = T_prog(n)%runoff_tracer_flux(i,j)
                else 
                   tracer_flux(i,j) = T_prog(n)%calving_tracer_flux(i,j)
                endif

@@ -466,9 +466,13 @@ use ocean_workspace_mod,      only: wrk1_2d, wrk2_2d, wrk3_2d, wrk1
 use ocean_util_mod,           only: diagnose_2d, diagnose_2d_u, diagnose_3d_u, diagnose_sum
 use ocean_tracer_util_mod,    only: diagnose_3d_rho
 
+use IFPORT, only: hostnam, MAX_HOSTNAM_LENGTH
+
 implicit none
 
 private
+
+character(MAX_HOSTNAM_LENGTH + 1) :: hostname
 
 ! for Bgrid or Cgrid 
 integer :: horz_grid 
@@ -1507,6 +1511,8 @@ subroutine ocean_sbc_init(Grid, Domain, Time, T_prog, T_diag, &
      allocate(runoff_no_interp_mask(isd:ied,jsd:jed))
      allocate(effective_temp(isd:ied,jsd:jed))
   end if
+
+  ierr = hostnam(hostname)
 
   return
 
@@ -3057,9 +3063,11 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
   integer :: stdoutunit 
   stdoutunit=stdout() 
 
-  pe = mpp_pe()
-  npes = mpp_npes()
-  root = mpp_root_pe()
+  ! pe = mpp_pe()
+  ! npes = mpp_npes()
+  ! root = mpp_root_pe()
+
+  ! print *,"Hostname: ",trim(hostname)," PE: ",pe
 
   matt_runoff_scale = 0.
   new_runoff = 0.
@@ -3314,7 +3322,7 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
             calving(ii,jj) = Ice_ocean_boundary%calving(i,j)*Grd%tmask(ii,jj,1)
          enddo
       enddo
-! MATT WATER
+      ! MATT WATER
       if(temp_ice_runoff_feedback) then       
 
          runoff_mask = .FALSE.
@@ -3324,8 +3332,7 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
          ! print *,'(Matt) ---- in temp_ice_runoff_feedback and PE = ',pe
 
          ! Loop through data domain on first pass, to determine effective temperature
-         ! Do slow looping, as we want to iterate over latitude and stop as soon as
-         ! we exceed the maximum latitude parameter
+         ! Do slow looping: iterate over latitude and stop as soon as maximum latitude exceeded
          LON: do i=isd,ied
             LAT: do j=jsd,jed
                ! As soon as cell is above about latitude cutoff don't bother checking the rest
@@ -3333,13 +3340,6 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
                ! Check we have runoff and we're in an ocean cell
                if (runoff(i,j) > 0 .and. Grd%kmt(i,j) > 0) then
                   total_runoff = total_runoff + runoff(i,j)
-                  ! Set runoff to zero in low runoff cells. Normalisation will redistribute this to other cells
-                  ! except if we're just calculating feedback scale
-                  if (runoff(i,j) < matt_runoff_limit .and. (.not. temp_ice_runoff_feedback_calc_scale)) then
-                     runoff(i,j) = 0.0
-                     cycle LAT
-                  end if
-                  runoff_mask(i,j) = .true.
                   ! Check the lower runoff limit
                   if (runoff(i,j) >= matt_runoff_limit) then
                      ! If depth greater than our minimum (top level, depth is positive) then mark
@@ -3348,23 +3348,43 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
                         runoff_no_interp_mask(i,j) = .true.
                         bot_level = min(matt_level_bot,Grd%kmt(i,j))
                         nlevels = bot_level - matt_level_top + 1
-                        
-                        ! Find average temperature of the water column from matt_level_top down to bot_level
-                        effective_temp(i,j) = sum(T_prog(index_temp)%field(i,j,matt_level_top:bot_level,tau))/real(nlevels)
-                        
+                        ! Find effective average temperature of the water column from matt_level_top down to bot_level,
+                        ! weighted by level thickness. Effective temperature is defined as:
+                        !
+                        !            T(W) - T(L)
+                        !
+                        ! Where T(W) is the water temperature, and
+                        !
+                        !            T(L) = -0.06 * S(W)
+                        !
+                        ! Where S(W) is salinity
+                        effective_temp(i,j) = sum((T_prog(index_temp)%field(i,j,matt_level_top:bot_level,tau) &
+                             + 0.06*T_prog(index_salt)%field(i,j,matt_level_top:bot_level,tau))*Thickness%dzt(i,j,matt_level_top:bot_level))/ &
+                             sum(Thickness%dzt(i,j,matt_level_top:bot_level))
                         ! print *,pe,i,j,matt_level_top, bot_level, nlevels, effective_temp(i,j)
+                        if (effective_temp(i,j) < 0.) then
+                           write(stdoutunit,'(A,I0,A,I0,A)') '==>ERROR: (ocean_sbc: temp_ice_runoff_feedback: negative effective temperature at (',i,',',j,') not allowed, set to zero '
+                           effective_temp(i,j) = 0.0
+                        end if
+                     end if
+                  else
+                     ! Set runoff to zero in low runoff cells unless we're just calculating feedback scale.
+                     ! Normalisation will redistribute this to other cells
+                     if (.not. temp_ice_runoff_feedback_calc_scale) then
+                        runoff(i,j) = 0.0
+                        ! Don't want this cell to be marked as runoff, so cycle
+                        cycle LAT
                      end if
                   end if
+                  runoff_mask(i,j) = .true.
                end if
             enddo LAT
          enddo LON
 
-         print *,'==>Note: (Matt). number in total_runoff_mask: ',pe,count(runoff_mask)
+         ! print *,'==>Note: (Matt). number in total_runoff_mask: ',pe,count(runoff_mask)
          ! write(stdoutunit,*) '==>Note: (Matt). number in total_runoff_mask: ',pe,count(runoff_mask)
          
-         if (count(runoff_mask) == 0) then
-            write(stdoutunit,*) '==>ERROR: (Matt). no runoff for PE=',pe
-         else
+         if (count(runoff_mask) > 0) then
             ! Loop over compute domain interpolating effective temperature values. Some
             ! of the temperature values will lie in the halos
             do j=jsc,jec
@@ -3373,27 +3393,34 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
                   ! Interpolate effective temperatures for shallow cells
                   if (.not. runoff_no_interp_mask(i,j)) then
                      ! Make the interpolation "box" always the maximum size,
-                     ! just fit it inside the data domain
+                     ! just fit it inside the data domain (compute domain + halos)
                      i1 = min(max(i-inti,isd),ied-2*inti); i2 = i1 + 2*inti
                      j1 = min(max(j-intj,jsd),jed-2*intj); j2 = j1 + 2*intj
                      ncells = count(runoff_no_interp_mask(i1:i2,j1:j2))
                      if (ncells > 0) then
-                        ! Average the cells which have an effective temperature already
-                        ! (mask removes effective_temp of the i,j position)
-                        effective_temp(i,j) = sum(effective_temp(i1:i2,j1:j2), mask=runoff_no_interp_mask(i1:i2,j1:j2)) / real(ncells)
+                        ! Average the cells which have an effective temperature already, weighted by cell area (dat)
+                        ! (mask removes effective_temp of the central position we are calculating)
+                        ! print *,pe,i,j,i1,i2,j1,j2,'ncells = ',ncells,'effective temperature: ',effective_temp(i,j) 
+                        effective_temp(i,j) = sum(effective_temp(i1:i2,j1:j2) * Grd%dat(i1:i2,j1:j2), mask=runoff_no_interp_mask(i1:i2,j1:j2)) / &
+                             (sum(Grd%dat(i1:i2,j1:j2), mask=runoff_no_interp_mask(i1:i2,j1:j2)))
                         ! print *,pe,i,j,'ncells = ',ncells,'effective temperature: ',effective_temp(i,j) 
                      else
-                        write(stdoutunit,*) '==>ERROR: (Matt). could not interpolate temperature for ',pe,i,j
+                        write(stdoutunit,'(A,3(I0,A))') '==>ERROR: (Matt). could not interpolate temperature: PE=',pe,' at (',i,",",j,")"
                      end if
                   end if
                   ! Bishak's funky runoff parameterisation
-                  new_runoff(i,j) = (1./(8.*Grd%dyt(i,j))) * (effective_temp(i,j) + 2.1) ** (4./3.) 
-                  ! print '(5I4,2F)',pe,i,j,matt_level_top, bot_level, nlevels, effective_temp(i,j), runoff(i,j)
+                  ! Make sure we never try to take the irrational root of a negative number
+                  ! effective_temp(i,j) = max(-2.1,effective_temp(i,j))
+                  if (effective_temp(i,j) < 0.) then
+                     write(stdoutunit,'(A,I0,A,I0,A)') '==>ERROR: (ocean_sbc: temp_ice_runoff_feedback: 2 negative effective temperature at (',i,',',j,') not allowed, set to zero '
+                     effective_temp(i,j) = 0.0
+                  end if
+                  new_runoff(i,j) = (1./(8.*Grd%dyt(i,j))) * (effective_temp(i,j) ** 1.352) 
                end do
             end do
             
-            write(stdoutunit,*) '==>Note: (Matt). total_runoff: ',pe,total_runoff
-            write(stdoutunit,*) '==>Note: (Matt). new_runoff: ',pe,new_runoff
+            ! write(stdoutunit,*) '==>Note: (Matt). total_runoff: ',pe,total_runoff
+            ! write(stdoutunit,*) '==>Note: (Matt). new_runoff: ',pe,sum(new_runoff,mask=runoff_mask)
             
             if (temp_ice_runoff_feedback_calc_scale) then
                ! Save this scale for subsequent runs
@@ -3403,27 +3430,13 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
                matt_total_runoff = matt_total_runoff + total_runoff
                matt_total_new_runoff = matt_total_new_runoff + sum(new_runoff,mask=runoff_mask)
             else
-               ! Normalise total runoff to original total
+               ! Normalise total runoff using pre-calculated feedback scale
                where (runoff_mask)
                   runoff = new_runoff*temp_ice_runoff_feedback_scale 
                end where
             end if
          end if
       end if
-
-      ! call mpp_sum(matt_runoff_scale)
-      ! call mpp_sum(num_runoff)
-!!$      call mpp_sum(total_runoff)
-!!$      call mpp_sum(new_runoff)
-!!$      if (pe == root) then
-!!$         ! matt_total_runoff_scale = matt_total_runoff_scale + matt_runoff_scale
-!!$         ! matt_num_runoff_scale = matt_num_runoff_scale + num_runoff
-!!$         matt_total_runoff_scale = matt_total_runoff_scale + real(total_runoff)/real(new_runoff)
-!!$         matt_num_runoff_scale = matt_num_runoff_scale + 1
-!!$         write(stdoutunit,*) '==>Note: (Matt). average runoff_scale (global): ', &
-!!$              matt_total_runoff_scale, matt_num_runoff_scale, real(total_runoff)/real(new_runoff), &
-!!$              matt_total_runoff_scale/real(matt_num_runoff_scale)
-!!$      end if
       ! END MATT WATER
 
       if(use_ideal_runoff) then
@@ -5781,7 +5794,10 @@ subroutine ocean_sbc_diag(Time, Velocity, Thickness, Dens, T_prog, Ice_ocean_bou
      call mpp_sum(matt_total_runoff)
      call mpp_sum(matt_total_new_runoff)
 
-     used = send_data (id_temp_runoff_feeback_scale, real(matt_total_runoff)/real(matt_total_new_runoff), Time%model_time)
+     if (matt_total_new_runoff > 0) then
+
+        used = send_data (id_temp_runoff_feeback_scale, real(matt_total_runoff)/real(matt_total_new_runoff), Time%model_time)
+     end if
 
      ! Reset runoff counters to zero 
      matt_total_runoff = 0.0
