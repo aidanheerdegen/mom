@@ -692,7 +692,7 @@ integer  :: id_tform_rho_pbl_lw_on_nrho     =-1
 integer  :: id_tform_rho_pbl_sens_on_nrho   =-1
 integer  :: id_tform_rho_pbl_lat_on_nrho    =-1
 
-! Matt id's
+! Antarctic temperature feedback id's
 integer :: id_effective_temp            = -1
 integer :: id_temp_runoff_feeback_scale = -1
 
@@ -733,10 +733,30 @@ real, allocatable, dimension(:,:) :: betasfc       ! surface saline contraction 
 real, allocatable, dimension(:,:,:) :: sslope
 #endif
 
-! Matt
-logical, allocatable, dimension(:,:) :: runoff_mask, runoff_no_interp_mask
-real, allocatable, dimension(:,:) :: effective_temp
-real, save :: matt_total_runoff = 0.0, matt_total_new_runoff = 0.0
+! Antarctic runoff feedback
+logical, allocatable, dimension(:,:) :: runoff_mask            ! points where runoff occurs below latitude cutoff
+logical, allocatable, dimension(:,:) :: runoff_no_interp_mask  ! subset of above, where water column is deeper than cutoff
+real, allocatable, dimension(:,:)    :: effective_temp         ! calculated temperature field T(w) - T(L)                              
+
+! All initialised variables have an implicit save attribute
+real :: total_runoff = 0.0     ! total runoff before feedback
+real :: total_new_runoff = 0.0 ! total runoff after feedback
+
+real, parameter :: ice_shelf_depth = 500.0        ! ice shelf height (metres)
+
+integer :: feedback_level_top, feedback_level_bot ! min and max of water column converted to depth indices
+logical :: temp_ice_runoff_feedback =.false.      ! set to true if feedback_calc_scale or feedback_scale specified
+
+! Namelist variables
+real :: temp_ice_runoff_feedback_maxlat  = -60.0     ! feedback turned on below this latitude
+real :: temp_ice_runoff_feedback_mindepth  = 100.0   ! minimum depth of water column
+real :: temp_ice_runoff_feedback_maxdepth  = 500.0   ! maximum depth of water column
+real :: temp_ice_runoff_feedback_minrunoff = 0.00001 ! runoff below this set to zero and redistributed
+integer :: temp_ice_runoff_feedback_avg_lon = 5      ! Averaging window for interpolating effective temperature for
+integer :: temp_ice_runoff_feedback_avg_lat = 5      ! shallow cells will be this many "cells/pixels" in size:
+                                                     ! 2 *temp_ice_runoff_feedback_avg_lon+1 x 2*temp_ice_runoff_feedback_avg_lat+1 
+logical :: temp_ice_runoff_feedback_calc_scale =.false.   ! Calculate scale, do not change runoff
+real    :: temp_ice_runoff_feedback_scale = missing_value ! Runoff feedback scale
 
 ! ice-ocean-boundary fields are allocated using absolute
 ! indices (regardless of whether ocean allocations are static)
@@ -819,10 +839,6 @@ logical :: use_ideal_runoff               =.false.
 logical :: use_ideal_calving              =.false.
 logical :: read_stokes_drift              =.false.
 logical :: do_langmuir                    =.false.
-! Matt
-logical :: temp_ice_runoff_feedback       =.false.
-logical :: temp_ice_runoff_feedback_calc_scale =.false.
-real    :: temp_ice_runoff_feedback_scale = 0.0
 
 real    :: constant_sss_for_restore       = 35.0
 real    :: constant_sst_for_restore       = 12.0
@@ -869,7 +885,10 @@ namelist /ocean_sbc_nml/ temp_restore_tscale, salt_restore_tscale, salt_restore_
          sbc_heat_fluxes_const, sbc_heat_fluxes_const_value, sbc_heat_fluxes_const_seasonal,                                 &
          use_constant_sss_for_restore, constant_sss_for_restore, use_constant_sst_for_restore, constant_sst_for_restore,     &
          use_ideal_calving, use_ideal_runoff, constant_hlf, constant_hlv, read_stokes_drift, do_langmuir,                    &
-         temp_ice_runoff_feedback, temp_ice_runoff_feedback_calc_scale, temp_ice_runoff_feedback_scale 
+         temp_ice_runoff_feedback_calc_scale, temp_ice_runoff_feedback_scale,                                                &
+         temp_ice_runoff_feedback_maxlat, temp_ice_runoff_feedback_mindepth, temp_ice_runoff_feedback_maxdepth,              &
+         temp_ice_runoff_feedback_minrunoff, temp_ice_runoff_feedback_avg_lon, temp_ice_runoff_feedback_avg_lat
+
 
 namelist /ocean_sbc_ofam_nml/ restore_mask_ofam, river_temp_ofam
 
@@ -1495,21 +1514,46 @@ subroutine ocean_sbc_init(Grid, Domain, Time, T_prog, T_diag, &
   ! initialize diagnostic manager fields 
   call ocean_sbc_diag_init(Time, Dens, T_prog)
 
-  ! MATT WATER
+  ! ICE RUNOFF FEEDBACK 
+  if (temp_ice_runoff_feedback_calc_scale) then
+     write(stdoutunit,*) '==>Note: ocean_sbc : temp_ice_runoff_feedback : Calculating scale of temperature induced ice runoff feedback.'
+     temp_ice_runoff_feedback = .true.
+  end if
+  if (temp_ice_runoff_feedback_scale .ne. missing_value) then
+     if (temp_ice_runoff_feedback_calc_scale) &
+          write(stdoutunit,*) '==>Error from ocean_sbc_mod: Temperature induced ice runoff : calc_scale flag ignored, as sale is specified'
+     write(stdoutunit,*) '==>Note: ocean_sbc : temperature induced ice runoff feedback with fixed scale: ',temp_ice_runoff_feedback_scale 
+     temp_ice_runoff_feedback = .true.
+  end if
   if(temp_ice_runoff_feedback) then       
-     if (temp_ice_runoff_feedback_calc_scale) then
-        write(stdoutunit,*) '==>Note: (Matt) Calculating scale of temperature induced ice runoff feedback.'
-     else
-        if (temp_ice_runoff_feedback_scale == 0.0) then
-           call mpp_error (FATAL,'==>Error from ocean_sbc_mod: (Matt) Temperature induced ice runoff feedback with fixed scale, but no scale specified')
-        else
-           write(stdoutunit,*) '==>Note: (Matt) Performing temperature induced ice runoff feedback with fixed scale: ',temp_ice_runoff_feedback_scale 
-        end if
-     end if
      ! Initialise masks for which we will calculate enhanced runoff
      allocate(runoff_mask(isd:ied,jsd:jed))
      allocate(runoff_no_interp_mask(isd:ied,jsd:jed))
      allocate(effective_temp(isd:ied,jsd:jed))
+
+     ! Convert min and max depths to levels
+     if (temp_ice_runoff_feedback_mindepth > temp_ice_runoff_feedback_maxdepth) &
+          call mpp_error (FATAL,'==>Error from ocean_sbc_mod: Temperature induced ice runoff feedback: mindepth is greater than maxdepth (NB: depths are positive down)')
+     do i = 1, size(Grd%zt)
+        if (Grd%zt(i) > temp_ice_runoff_feedback_mindepth) then
+           feedback_level_top = max(i-1,1)
+           exit
+        end if
+     end do
+     if (Grd%zt(-1) > temp_ice_runoff_feedback_maxdepth) then
+        write(stdoutunit,*) '==>Note from ocean_sbc_mod: Temperature induced ice runoff feedback: maxdepth is greater than maximum depth of ocean, truncated'
+        feedback_level_bot = size(Grd%zt)
+     else
+        do i = feedback_level_top+1, size(Grd%zt)
+           if (Grd%zt(i) > temp_ice_runoff_feedback_maxdepth) then
+              feedback_level_bot = i-1
+              exit
+           end if
+        end do
+     end if
+     write(stdoutunit,'(A,I0,A,F0.2,A)') '==>Note from ocean_sbc_mod: init : feedback_level_top = ',feedback_level_top,' (',Grd%zt(feedback_level_top),'m)'
+     write(stdoutunit,'(A,I0,A,F0.2,A)') '==>Note from ocean_sbc_mod: init : feedback_level_bot = ',feedback_level_bot,' (',Grd%zt(feedback_level_bot),'m)'
+
   end if
 
   ierr = hostnam(hostname)
@@ -2175,7 +2219,7 @@ subroutine ocean_sbc_diag_init(Time, Dens, T_prog)
        'impact of surface latent (vapor and solid) heat (>0 heats ocean) on water mass transformation ',&
        'kg/sec', missing_value=missing_value, range=(/-1.e20,1.e20/))
 
-  ! Matt diagnostics
+  ! Ice runoff feedback diagnostics
   id_effective_temp = register_diag_field('ocean_model','effective_temp', Grd%tracer_axes(1:2),&
        Time%model_time, 'Effective temperature of water column (averaged over proscribed depth)', &    
        'degC' , missing_value=missing_value,range=(/-100.,100./))            
@@ -3047,32 +3091,21 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
   integer :: tau, taup1, n, i, j, k, ii, jj
   integer :: day, sec 
 
-  ! MATT variables
-  real :: total_runoff
-  integer :: bot_level, nlevels, ncells, i1, i2, j1, j2
+  ! Ice runoff feedback variables
+  integer :: bot_level, ncells, i1, i2, j1, j2
   real, dimension(isd:ied,jsd:jed) :: new_runoff 
+  real :: old_runoff
 
-  real :: matt_depth_top = 100, matt_depth_bot = 400, matt_max_lat = -60., matt_runoff_limit = 0.00001
-  integer :: matt_level_top = 10, matt_level_bot = 23, inti=5, intj=5
-  real :: matt_runoff_scale
-  logical :: matt_first_time = .true.
-  integer :: num_runoff
-
-  integer                         :: pe, npes, root
+  integer :: inti, intj
 
   integer :: stdoutunit 
   stdoutunit=stdout() 
 
-  ! pe = mpp_pe()
-  ! npes = mpp_npes()
-  ! root = mpp_root_pe()
+  inti = temp_ice_runoff_feedback_avg_lon 
+  intj = temp_ice_runoff_feedback_avg_lat 
 
-  ! print *,"Hostname: ",trim(hostname)," PE: ",pe
-
-  matt_runoff_scale = 0.
   new_runoff = 0.
-  total_runoff = 0.
-  num_runoff = 0
+  old_runoff = 0.
                         
   tau   = Time%tau
   taup1 = Time%taup1
@@ -3322,33 +3355,30 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
             calving(ii,jj) = Ice_ocean_boundary%calving(i,j)*Grd%tmask(ii,jj,1)
          enddo
       enddo
-      ! MATT WATER
+      ! Ice runoff feedback 
       if(temp_ice_runoff_feedback) then       
 
          runoff_mask = .FALSE.
          runoff_no_interp_mask = .FALSE.
          effective_temp = missing_value
 
-         ! print *,'(Matt) ---- in temp_ice_runoff_feedback and PE = ',pe
-
          ! Loop through data domain on first pass, to determine effective temperature
          ! Do slow looping: iterate over latitude and stop as soon as maximum latitude exceeded
          LON: do i=isd,ied
             LAT: do j=jsd,jed
                ! As soon as cell is above about latitude cutoff don't bother checking the rest
-               if (Grd%yt(i,j) > matt_max_lat) cycle LON
+               if (Grd%yt(i,j) > temp_ice_runoff_feedback_maxlat) cycle LON
                ! Check we have runoff and we're in an ocean cell
                if (runoff(i,j) > 0 .and. Grd%kmt(i,j) > 0) then
-                  total_runoff = total_runoff + runoff(i,j)
+                  old_runoff = old_runoff + runoff(i,j)
                   ! Check the lower runoff limit
-                  if (runoff(i,j) >= matt_runoff_limit) then
+                  if (runoff(i,j) >= temp_ice_runoff_feedback_minrunoff) then
                      ! If depth greater than our minimum (top level, depth is positive) then mark
                      ! as not requiring interpolation and save effective temperature
-                     if (Grd%kmt(i,j) > matt_level_top) then
+                     if (Grd%kmt(i,j) > feedback_level_top) then
                         runoff_no_interp_mask(i,j) = .true.
-                        bot_level = min(matt_level_bot,Grd%kmt(i,j))
-                        nlevels = bot_level - matt_level_top + 1
-                        ! Find effective average temperature of the water column from matt_level_top down to bot_level,
+                        bot_level = min(feedback_level_bot,Grd%kmt(i,j))
+                        ! Find effective average temperature of the water column from feedback_level_top down to bot_level,
                         ! weighted by level thickness. Effective temperature is defined as:
                         !
                         !            T(W) - T(L)
@@ -3358,10 +3388,9 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
                         !            T(L) = -0.06 * S(W)
                         !
                         ! Where S(W) is salinity
-                        effective_temp(i,j) = sum((T_prog(index_temp)%field(i,j,matt_level_top:bot_level,tau) &
-                             + 0.06*T_prog(index_salt)%field(i,j,matt_level_top:bot_level,tau))*Thickness%dzt(i,j,matt_level_top:bot_level))/ &
-                             sum(Thickness%dzt(i,j,matt_level_top:bot_level))
-                        ! print *,pe,i,j,matt_level_top, bot_level, nlevels, effective_temp(i,j)
+                        effective_temp(i,j) = sum((T_prog(index_temp)%field(i,j,feedback_level_top:bot_level,tau) &
+                             + 0.06*T_prog(index_salt)%field(i,j,feedback_level_top:bot_level,tau))*Thickness%dzt(i,j,feedback_level_top:bot_level))/ &
+                             sum(Thickness%dzt(i,j,feedback_level_top:bot_level))
                         if (effective_temp(i,j) < 0.) then
                            write(stdoutunit,'(A,I0,A,I0,A)') '==>ERROR: (ocean_sbc: temp_ice_runoff_feedback: negative effective temperature at (',i,',',j,') not allowed, set to zero '
                            effective_temp(i,j) = 0.0
@@ -3381,9 +3410,6 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
             enddo LAT
          enddo LON
 
-         ! print *,'==>Note: (Matt). number in total_runoff_mask: ',pe,count(runoff_mask)
-         ! write(stdoutunit,*) '==>Note: (Matt). number in total_runoff_mask: ',pe,count(runoff_mask)
-         
          if (count(runoff_mask) > 0) then
             ! Loop over compute domain interpolating effective temperature values. Some
             ! of the temperature values will lie in the halos
@@ -3405,30 +3431,23 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
                              (sum(Grd%dat(i1:i2,j1:j2), mask=runoff_no_interp_mask(i1:i2,j1:j2)))
                         ! print *,pe,i,j,'ncells = ',ncells,'effective temperature: ',effective_temp(i,j) 
                      else
-                        write(stdoutunit,'(A,3(I0,A))') '==>ERROR: (Matt). could not interpolate temperature: PE=',pe,' at (',i,",",j,")"
+                        write(stdoutunit,'(A,2(I0,A))') '==>ERROR: ocean_sbc : could not interpolate temperature: at (',i,",",j,")"
                      end if
                   end if
                   ! Bishak's funky runoff parameterisation
-                  ! Make sure we never try to take the irrational root of a negative number
-                  ! effective_temp(i,j) = max(-2.1,effective_temp(i,j))
+                  ! Make sure we never try to take the irrational root of a negative number. Shouldn't have to
+                  ! check this again, but was still getting floating point invalid errors
                   if (effective_temp(i,j) < 0.) then
                      write(stdoutunit,'(A,I0,A,I0,A)') '==>ERROR: (ocean_sbc: temp_ice_runoff_feedback: 2 negative effective temperature at (',i,',',j,') not allowed, set to zero '
                      effective_temp(i,j) = 0.0
                   end if
-                  new_runoff(i,j) = (1./(8.*Grd%dyt(i,j))) * (effective_temp(i,j) ** 1.352) 
+                  new_runoff(i,j) = ((1.e-3*ice_shelf_depth)/(4.*Grd%dyt(i,j))) * (effective_temp(i,j) ** 1.352) 
                end do
             end do
             
-            ! write(stdoutunit,*) '==>Note: (Matt). total_runoff: ',pe,total_runoff
-            ! write(stdoutunit,*) '==>Note: (Matt). new_runoff: ',pe,sum(new_runoff,mask=runoff_mask)
-            
             if (temp_ice_runoff_feedback_calc_scale) then
-               ! Save this scale for subsequent runs
-               matt_runoff_scale = total_runoff/sum(new_runoff,mask=runoff_mask)
-               ! write(stdoutunit,*) '==>Note: (Matt). instantaneous runoff_scale: ',pe,matt_runoff_scale
-               num_runoff = num_runoff + 1
-               matt_total_runoff = matt_total_runoff + total_runoff
-               matt_total_new_runoff = matt_total_new_runoff + sum(new_runoff,mask=runoff_mask)
+               total_runoff = total_runoff + old_runoff
+               total_new_runoff = total_new_runoff + sum(new_runoff,mask=runoff_mask)
             else
                ! Normalise total runoff using pre-calculated feedback scale
                where (runoff_mask)
@@ -3437,7 +3456,7 @@ subroutine get_ocean_sbc(Time, Ice_ocean_boundary, Thickness, Dens, Ext_mode, T_
             end if
          end if
       end if
-      ! END MATT WATER
+      ! END ICE RUNOFF FEEDBACK
 
       if(use_ideal_runoff) then
           do j=jsc,jec
@@ -5791,16 +5810,16 @@ subroutine ocean_sbc_diag(Time, Velocity, Thickness, Dens, T_prog, Ice_ocean_bou
      ! Effective temperature for ice runoff feedback
      call diagnose_2d(Time, Grd, id_effective_temp, effective_temp(:,:))
 
-     call mpp_sum(matt_total_runoff)
-     call mpp_sum(matt_total_new_runoff)
+     call mpp_sum(total_runoff)
+     call mpp_sum(total_new_runoff)
 
-     if (matt_total_new_runoff > 0) then
-        used = send_data (id_temp_runoff_feeback_scale, real(matt_total_runoff)/real(matt_total_new_runoff), Time%model_time)
+     if (total_new_runoff > 0) then
+        used = send_data (id_temp_runoff_feeback_scale, real(total_runoff)/real(total_new_runoff), Time%model_time)
      end if
 
      ! Reset runoff counters to zero 
-     matt_total_runoff = 0.0
-     matt_total_new_runoff = 0.0
+     total_runoff = 0.0
+     total_new_runoff = 0.0
 
   end if
 
