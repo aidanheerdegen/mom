@@ -460,9 +460,24 @@ subroutine surface_flux_1d (                                           &
            
      where(avail) 
         w_atm = sqrt(u_dif*u_dif + v_dif*v_dif + w_gust*w_gust)
+     elsewhere
+        w_atm = 0.
+     endwhere
+
+!     do i = 1, size(w_atm)
+!        if (.not. avail(i)) cycle
+!        if (w_atm(i) < 10.*tiny(w_atm)) then
+!           print *,"TINY ",i,u_dif(i),v_dif(i),w_gust(i),u_surf(i),u_atm(i),v_surf(i),v_atm(i)
+!        end if
+!     end do
+
+     where(w_atm > 0.) 
         ! derivatives of surface wind w.r.t. atm. wind components
         dw_atmdu = u_dif/w_atm
         dw_atmdv = v_dif/w_atm
+     elsewhere
+        dw_atmdu = 0.
+        dw_atmdv = 0.
      endwhere
   endif
 
@@ -477,7 +492,7 @@ subroutine surface_flux_1d (                                           &
                              seawater, cd_m, cd_t, cd_q, u_star, b_star     )
   end if
 
-  where (avail)
+  where (avail .and. u_star /= 0.0)
      ! scale momentum drag coefficient on orographic roughness
      cd_m = cd_m*(log(z_atm/rough_mom+1)/log(z_atm/rough_scale+1))**2
      ! surface layer drag coefficients
