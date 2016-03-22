@@ -464,13 +464,6 @@ subroutine surface_flux_1d (                                           &
         w_atm = 0.
      endwhere
 
-!     do i = 1, size(w_atm)
-!        if (.not. avail(i)) cycle
-!        if (w_atm(i) < 10.*tiny(w_atm)) then
-!           print *,"TINY ",i,u_dif(i),v_dif(i),w_gust(i),u_surf(i),u_atm(i),v_surf(i),v_atm(i)
-!        end if
-!     end do
-
      where(w_atm > 0.) 
         ! derivatives of surface wind w.r.t. atm. wind components
         dw_atmdu = u_dif/w_atm
