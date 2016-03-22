@@ -485,7 +485,7 @@ subroutine surface_flux_1d (                                           &
                              seawater, cd_m, cd_t, cd_q, u_star, b_star     )
   end if
 
-  where (avail .and. u_star /= 0.0)
+  where (avail)
      ! scale momentum drag coefficient on orographic roughness
      cd_m = cd_m*(log(z_atm/rough_mom+1)/log(z_atm/rough_scale+1))**2
      ! surface layer drag coefficients
@@ -516,10 +516,6 @@ subroutine surface_flux_1d (                                           &
         
      dedq_atm  = -rho_drag   ! d(latent heat flux)/d(atmospheric mixing ratio)
 
-     q_star = flux_q / (u_star * rho)             ! moisture scale
-     ! ask Chris and Steve K if we still want to keep this for diagnostics
-     q_surf = q_atm + flux_q / (rho*cd_q*w_atm)   ! surface specific humidity
-
      ! upward long wave radiation
      flux_r    =   stefan*t_surf**4               ! (W/m**2)
      drdt_surf = 4*stefan*t_surf**3               ! d(upward longwave)/d(surface temperature)
@@ -544,10 +540,23 @@ subroutine surface_flux_1d (                                           &
      dedq_atm   = 0.0
      u_star     = 0.0
      b_star     = 0.0
-     q_star     = 0.0
-     q_surf     = 0.0
      w_atm      = 0.0
   endwhere
+
+  ! Break out u_star and q_surf to explicitly check for zero values in denominators
+
+  where (avail .and. u_star /= 0.0)
+     q_star = flux_q / (u_star * rho)             ! moisture scale
+  elsewhere
+     q_star     = 0.0
+  end where
+
+  where (avail .and. w_atm /= 0.0)
+     ! ask Chris and Steve K if we still want to keep this for diagnostics
+     q_surf = q_atm + flux_q / (rho*cd_q*w_atm)   ! surface specific humidity
+  elsewhere
+     q_surf     = 0.0
+  end where
 
   ! calculate d(stress component)/d(atmos wind component)
   dtaudu_atm = 0.0
