@@ -15,7 +15,7 @@ else
 endif
 
 $mkmf_lib -p $lib_name.a -c "$cppDefs" -o "$includes" $srcList $lib_include_dirs
-make
+make -j
 
 if( $status ) then
     echo "Make failed to create $lib_name.a"

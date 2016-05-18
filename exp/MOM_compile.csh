@@ -111,6 +111,7 @@ set includes = "-I$code_dir/shared/include -I$executable:h:h/lib_FMS -I$executab
 # Build the core ocean.
 cd $root/exp
 source ./ocean_compile.csh
+
 if ( $status ) exit $status
 
 if( $type != MOM_solo && $type != ACCESS-OM  && $type != ACCESS-CM) then
@@ -120,11 +121,12 @@ if( $type != MOM_solo && $type != ACCESS-OM  && $type != ACCESS-CM) then
 endif
 if( $type == MOM_SIS) then
     cd $root/exp
-    source ./land_null_compile.csh
-    if ( $status ) exit $status
+    source ./land_null_compile.csh &
+    # if ( $status ) exit $status
 
     cd $root/exp
-    source ./atmos_null_compile.csh
+    source ./atmos_null_compile.csh &
+    wait
     if ( $status ) exit $status
 endif
 if( $type == EBM) then
@@ -195,7 +197,8 @@ else
     exit 1
 endif
 $mkmf_exec -o "$includes" -c "$cppDefs" -l "$libs"  $srcList
-make
+make -j 8
+# make
 if( $status ) then
     echo "Make failed to create the $type executable"
     exit 1

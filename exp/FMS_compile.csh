@@ -115,7 +115,7 @@ endif
 mkdir -p $executable:h:h/$lib_name
 cd $executable:h:h/$lib_name
 $mkmf_lib -p $lib_name.a -c "$cppDefs" $srcList $pathnames_shared $lib_include_dirs
-make
+make -j
 
 if( $status ) then
     echo "Make failed to create $lib_name.a"

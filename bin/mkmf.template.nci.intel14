@@ -17,9 +17,9 @@ CC = mpicc
 #########
 # flags #
 #########
-REPRO =
+REPRO = 
 VERBOSE =
-OPT = on
+OPT = 
 
 MAKEFLAGS += --jobs=4
 
@@ -32,8 +32,8 @@ INCLUDE  += -I$(OASIS_ROOT)/include/psmile.MPI1 \
 endif
 
 FPPFLAGS := -fpp -Wp,-w $(INCLUDE)
-FFLAGS := -fno-alias -safe-cray-ptr -ftz -assume byterecl -i4 -r8 -traceback -nowarn -check noarg_temp_created -assume nobuffered_io -convert big_endian -grecord-gcc-switches -align all
-FFLAGS_OPT = -O3 -debug minimal -xHost
+FFLAGS := -fno-alias -safe-cray-ptr -ftz -assume byterecl -i4 -r8 -traceback -nowarn -check noarg_temp_created -assume nobuffered_io -convert big_endian -grecord-gcc-switches -align all -fpe0 -traceback 
+FFLAGS_OPT = -O3 -xHost
 FFLAGS_DEBUG = -g -O0 -debug all -check -check noarg_temp_created -check nopointer -warn -warn noerrors -ftrapuv
 FFLAGS_REPRO = -O2 -debug minimal -no-vec -fp-model precise
 FFLAGS_VERBOSE = -v -V -what
