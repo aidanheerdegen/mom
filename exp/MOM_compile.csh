@@ -95,6 +95,8 @@ endif
 #
 source $root/bin/environs.$platform  # environment variables and loadable modules
 
+module list
+
 #
 # compile mppnccombine.c, needed only if $npes > 1
 if ( ! -f $mppnccombine ) then
