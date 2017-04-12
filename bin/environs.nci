@@ -3,7 +3,10 @@ module purge
 module load intel-fc/16.0.2.181
 module load intel-cc/16.0.2.181
 module load netcdf/4.3.3.1
-module use /projects/v45/modules
-module load oasis/dev
 module load openmpi/1.10.2
-setenv mpirunCommand   "mpirun --mca orte_base_help_aggregate 0 -np"
+
+set oasis_root=/home/502/aph502/v45_short/COSIMA/access-om/src/oasis3-mct/ 
+
+set cpath=(${oasis_root}/include/mct ${oasis_root}/include/mctdir ${oasis_root}/include/psmile.MPI1 ${oasis_root}/include/scrip)
+set fpath=(${oasis_root}/include/mct ${oasis_root}/include/mctdir ${oasis_root}/include/psmile.MPI1 ${oasis_root}/include/scrip)
+
