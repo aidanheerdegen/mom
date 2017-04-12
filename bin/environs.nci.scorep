@@ -1,0 +1,15 @@
+source /etc/profile.d/nf_csh_modules
+
+module purge
+module load intel-fc/14.3.174
+module load intel-cc/14.3.174
+module load netcdf/4.3.2
+module load openmpi/1.10.2
+module load scorep/3.0
+
+set oasis_root=/home/502/aph502/v45_short/COSIMA/access-om/src/oasis3-mct/ 
+
+set cpath=(${oasis_root}/include/mct ${oasis_root}/include/mctdir ${oasis_root}/include/psmile.MPI1 ${oasis_root}/include/scrip)
+set fpath=(${oasis_root}/include/mct ${oasis_root}/include/mctdir ${oasis_root}/include/psmile.MPI1 ${oasis_root}/include/scrip)
+
+
