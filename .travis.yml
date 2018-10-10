@@ -5,7 +5,6 @@ sudo: required
 
 git:
     depth: 3
-    quiet: true
 
 env:
     global:
@@ -13,26 +12,26 @@ env:
         - OMPI_FC=${FC}
     
 matrix:
-    include:
-        - name: "ACCESS-CM"
-          env: TYPE=ACCESS-CM OASIS_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2/build/oasis3-mct-prefix/src/oasis3-mct
-        - name: "ACCESS-OM" 
-          env: TYPE=ACCESS_OM LIBACCESSOM2_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2
-        - name: "MOM_solo"
-          env: TYPE=MOM_solo
-        - name: "MOM_SIS"
-          env: TYPE=MOM_SIS
-        - name: "MOM_CM2M"
-          env: TYPE=CM2M
-        - name: "ESM2M"
-          env: TYPE=ESM2M
-        - name: "ICCM"
-          env: TYPE=ICCM
-        - name: "EBM"
-          env: TYPE=EBM
-  allow_failures:
-    - name: TYPE=ACCESS-OM
-    # - env: TYPE=ACCESS-CM
+  include:
+    - name: "ACCESS-CM"
+      env: TYPE=ACCESS-CM OASIS_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2/build/oasis3-mct-prefix/src/oasis3-mct
+    - name: "ACCESS-OM" 
+      env: TYPE=ACCESS_OM LIBACCESSOM2_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2
+    - name: "MOM_solo"
+      env: TYPE=MOM_solo
+    - name: "MOM_SIS"
+      env: TYPE=MOM_SIS
+    - name: "MOM_CM2M"
+      env: TYPE=CM2M
+    - name: "ESM2M"
+      env: TYPE=ESM2M
+    - name: "ICCM"
+      env: TYPE=ICCM
+    - name: "EBM"
+      env: TYPE=EBM
+#  allow_failures:
+#    - ACCESS-OM
+#    # - env: TYPE=ACCESS-CM
 
 install:
     - sudo apt-add-repository --yes ppa:ubuntu-toolchain-r/test
@@ -40,9 +39,7 @@ install:
     - sudo apt-get install csh gcc-4.8
 
 before_script:
-    # - bin/get_oasis3_library.sh 
-    - git clone --depth=1 https://github.com/OceansAus/libaccessom2.git
-    - [[ ${LIBACCESSOM2_ROOT} || ${OASIS_ROOT} ]] && /v45/aph502/access-om2/bin/ ]] cd ${LIBACCESSOM2_ROOT} && mkdir build && cd build && cmake .. && make
+    - bin/get_oasis3_library.sh 
 
 script: 
     - cd exp && ./MOM_compile.csh --type $TYPE --platform travis --use_netcdf4

@@ -1,6 +1,3 @@
 #!/bin/bash
-TARFILE=$(curl -s https://api.github.com/repos/OceansAus/oasis3-mct/releases/latest | grep browser_download_url | cut -d: -f2- | tr -d ' "')
-wget ${TARFILE}
-tar -xzf $(basename ${TARFILE})
-readlink -f Linux
-ls -R Linux
+
+[[ ${LIBACCESSOM2_ROOT} || ${OASIS_ROOT} ]] && git clone --depth=1 https://github.com/OceansAus/libaccessom2.git cd ${LIBACCESSOM2_ROOT} && mkdir build && cd build && cmake .. && make
