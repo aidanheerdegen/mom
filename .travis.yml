@@ -9,14 +9,23 @@ git:
 
 env:
     matrix:
-        - TYPE=ACCESS-CM OASIS_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2/build/oasis3-mct-prefix/src/oasis3-mct
-        - TYPE=ACCESS-OM LIBACCESSOM2_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2
-        - TYPE=MOM_solo
-        - TYPE=MOM_SIS
-        - TYPE=CM2M
-        - TYPE=ESM2M
-        - TYPE=ICCM
-        - TYPE=EBM
+        include:
+            - name: "ACCESS-CM"
+              env: TYPE=ACCESS-CM OASIS_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2/build/oasis3-mct-prefix/src/oasis3-mct
+            - name: "ACCESS-OM" 
+              env: TYPE=ACCESS_OM LIBACCESSOM2_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2
+            - name: "MOM_solo"
+              env: TYPE=MOM_solo
+            - name: "MOM_SIS"
+              env: TYPE=MOM_SIS
+            - name: "MOM_CM2M"
+              env: TYPE=CM2M
+            - name: "ESM2M"
+              env: TYPE=ESM2M
+            - name: "ICCM"
+              env: TYPE=ICCM
+            - name: "EBM"
+              env: TYPE=EBM
     global:
         - FC=gfortran-4.8
         - OMPI_FC=${FC}
@@ -34,7 +43,7 @@ install:
 before_script:
     # - bin/get_oasis3_library.sh 
     - git clone --depth=1 https://github.com/OceansAus/libaccessom2.git
-    - mkdir build && cd build && cmake .. && make
+    - [[ ${LIBACCESSOM2_ROOT} || ${OASIS_ROOT} ]] && /v45/aph502/access-om2/bin/ ]] cd ${LIBACCESSOM2_ROOT} && mkdir build && cd build && cmake .. && make
 
 script: 
     - cd exp && ./MOM_compile.csh --type $TYPE --platform travis --use_netcdf4
