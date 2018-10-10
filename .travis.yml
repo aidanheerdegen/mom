@@ -9,18 +9,18 @@ git:
 
 env:
     matrix:
+        - TYPE=ACCESS-CM
+        - TYPE=ACCESS-OM
         - TYPE=MOM_solo
         - TYPE=MOM_SIS
         - TYPE=CM2M
         - TYPE=ESM2M
         - TYPE=ICCM
         - TYPE=EBM
-        - TYPE=ACCESS-OM
-        - TYPE=ACCESS-CM
     global:
         - FC=gfortran-4.8
         - OMPI_FC=${FC}
-        - OASIS_ROOT=$TRAVIS_BUILD_DIR/oasis3-mct/Linux
+        - OASIS_ROOT=$TRAVIS_BUILD_DIR/Linux
     
 matrix:
   allow_failures:
@@ -33,8 +33,8 @@ install:
     - sudo apt-get install csh gcc-4.8 gfortran-4.8 libgomp1 openmpi-bin libopenmpi-dev  libnetcdf-dev  netcdf-bin
 
 before_script:
-    - git clone --depth=1 https://github.com/OceansAus/oasis3-mct.git
-    - (cd oasis3-mct && make ubuntu)
+    - curl -O $(curl -s https://api.github.com/repos/OceansAus/oasis3-mct/releases/latest | grep browser_download_url | cut -d: -f2- | tr -d ' "')
+    - tar -xf binary_release.tar.gz
 
 script: 
     - cd exp && ./MOM_compile.csh --type $TYPE --platform travis --use_netcdf4
