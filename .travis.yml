@@ -9,8 +9,8 @@ git:
 
 env:
     matrix:
-        - TYPE=ACCESS-CM
-        - TYPE=ACCESS-OM
+        - TYPE=ACCESS-CM OASIS_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2/build/oasis3-mct-prefix/src/oasis3-mct
+        - TYPE=ACCESS-OM LIBACCESSOM2_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2
         - TYPE=MOM_solo
         - TYPE=MOM_SIS
         - TYPE=CM2M
@@ -20,7 +20,6 @@ env:
     global:
         - FC=gfortran-4.8
         - OMPI_FC=${FC}
-        - OASIS_ROOT=$TRAVIS_BUILD_DIR/Linux
     
 matrix:
   allow_failures:
@@ -30,10 +29,12 @@ matrix:
 install:
     - sudo apt-add-repository --yes ppa:ubuntu-toolchain-r/test
     - sudo apt-get update
-    - sudo apt-get install csh gcc-4.8 gfortran-4.8 libgomp1 openmpi-bin libopenmpi-dev  libnetcdf-dev  netcdf-bin
+    - sudo apt-get install csh gcc-4.8
 
 before_script:
-    - bin/get_oasis3_library.sh 
+    # - bin/get_oasis3_library.sh 
+    - git clone --depth=1 git@github.com:OceansAus/libaccessom2.git
+    - mkdir build && cd build && cmake .. && make
 
 script: 
     - cd exp && ./MOM_compile.csh --type $TYPE --platform travis --use_netcdf4
