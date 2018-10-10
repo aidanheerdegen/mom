@@ -33,7 +33,7 @@ install:
 
 before_script:
     # - bin/get_oasis3_library.sh 
-    - git clone --depth=1 git@github.com:OceansAus/libaccessom2.git
+    - git clone --depth=1 https://github.com/OceansAus/libaccessom2.git
     - mkdir build && cd build && cmake .. && make
 
 script: 
