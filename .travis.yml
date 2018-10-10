@@ -32,7 +32,7 @@ env:
     
 matrix:
   allow_failures:
-    - env: TYPE=ACCESS-OM
+    - name: TYPE=ACCESS-OM
     # - env: TYPE=ACCESS-CM
 
 install:
