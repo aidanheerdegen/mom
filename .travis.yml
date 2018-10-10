@@ -8,29 +8,28 @@ git:
     quiet: true
 
 env:
-    matrix:
-        include:
-            - name: "ACCESS-CM"
-              env: TYPE=ACCESS-CM OASIS_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2/build/oasis3-mct-prefix/src/oasis3-mct
-            - name: "ACCESS-OM" 
-              env: TYPE=ACCESS_OM LIBACCESSOM2_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2
-            - name: "MOM_solo"
-              env: TYPE=MOM_solo
-            - name: "MOM_SIS"
-              env: TYPE=MOM_SIS
-            - name: "MOM_CM2M"
-              env: TYPE=CM2M
-            - name: "ESM2M"
-              env: TYPE=ESM2M
-            - name: "ICCM"
-              env: TYPE=ICCM
-            - name: "EBM"
-              env: TYPE=EBM
     global:
         - FC=gfortran-4.8
         - OMPI_FC=${FC}
     
 matrix:
+    include:
+        - name: "ACCESS-CM"
+            env: TYPE=ACCESS-CM OASIS_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2/build/oasis3-mct-prefix/src/oasis3-mct
+        - name: "ACCESS-OM" 
+            env: TYPE=ACCESS_OM LIBACCESSOM2_ROOT=${TRAVIS_BUILD_DIR}/libaccessom2
+        - name: "MOM_solo"
+            env: TYPE=MOM_solo
+        - name: "MOM_SIS"
+            env: TYPE=MOM_SIS
+        - name: "MOM_CM2M"
+            env: TYPE=CM2M
+        - name: "ESM2M"
+            env: TYPE=ESM2M
+        - name: "ICCM"
+            env: TYPE=ICCM
+        - name: "EBM"
+            env: TYPE=EBM
   allow_failures:
     - name: TYPE=ACCESS-OM
     # - env: TYPE=ACCESS-CM
