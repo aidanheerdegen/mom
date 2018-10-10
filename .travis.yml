@@ -36,7 +36,7 @@ matrix:
 install:
     - sudo apt-add-repository --yes ppa:ubuntu-toolchain-r/test
     - sudo apt-get update
-    - sudo apt-get install csh gcc-4.8
+    - sudo apt-get install csh gcc-4.8 gfortran-4.8 libgomp1 openmpi-bin libopenmpi-dev  libnetcdf-dev  netcdf-bin
 
 before_script:
     - bin/get_oasis3_library.sh 
