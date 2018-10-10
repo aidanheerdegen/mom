@@ -33,8 +33,7 @@ install:
     - sudo apt-get install csh gcc-4.8 gfortran-4.8 libgomp1 openmpi-bin libopenmpi-dev  libnetcdf-dev  netcdf-bin
 
 before_script:
-    - curl -O $(curl -s https://api.github.com/repos/OceansAus/oasis3-mct/releases/latest | grep browser_download_url | cut -d: -f2- | tr -d ' "')
-    - tar -xf binary_release.tar.gz
+    - bin/get_oasis3_library.sh 
 
 script: 
     - cd exp && ./MOM_compile.csh --type $TYPE --platform travis --use_netcdf4
