@@ -1,4 +1,4 @@
-#!/bin/csh -fx
+#!/bin/csh -f
 # Minimal compile script for fully coupled model CM2M experiments
 
 set platform      = gfortran    # A unique identifier for your platfo
@@ -7,25 +7,9 @@ set type          = MOM_solo    # Type of the experiment
 set unit_testing = 0
 set help = 0
 set debug = 0
-set environ = 1
 set use_netcdf4 = 0
-set no_environ = 0
 
-getopt -T >&/dev/null
-if ( $status == 4) then
-  echo "Enhanced getopt(1)"
-else
-  echo "Old getopt(1)"
-endif
-
-set temp = (`getopt -u -s csh -o h -l type:,platform:,help,unit_testing,debug,use_netcdf4 --  $*`)
-if ($? != 0) then 
-  # Die if there are incorrect options
-  set help = 1
-  goto help
-endif
-eval set argv=\($temp:q\)
-
+set argv = (`getopt -u -o h -l type: -l platform: -l help -l unit_testing -l debug -l use_netcdf4 --  $*`)
 while ("$argv[1]" != "--")
     switch ($argv[1])
         case --type:
@@ -34,8 +18,6 @@ while ("$argv[1]" != "--")
                 set platform = $argv[2]; shift argv; breaksw
         case --unit_testing:
                 set unit_testing = 1; breaksw
-        case --no_environ:
-                set environ = 0; breaksw
         case --debug:
                 set debug = 1; breaksw
         case --use_netcdf4:
@@ -48,11 +30,8 @@ while ("$argv[1]" != "--")
     shift argv
 end
 shift argv
-help:
 if ( $help ) then
-    echo
     echo "The optional arguments are:"
-    echo
     echo "--type       followed by the type of the model, one of the following (default is MOM_solo):"
     echo "             MOM_solo  : solo ocean model"
     echo "             MOM_SIS   : ocean-seaice model"
@@ -66,8 +45,6 @@ if ( $help ) then
     echo "--platform   followed by the platform name that has a corresponfing environ file in the ../bin dir, default is gfortran"
     echo
     echo "--use_netcdf4  use NetCDF4, the default is NetCDF4. Warning: many of the standard experiments don't work with NetCDF4."
-    echo
-    echo "--no_environ  do not source platform specific environment. Allows customising/overriding default environment"
     echo
     exit 1
 endif
@@ -116,9 +93,7 @@ endif
 #
 # Users must ensure the correct environment file exists for their platform.
 #
-if ($environ) then
-  source $root/bin/environs.$platform  # environment variables and loadable modules 
-endif
+source $root/bin/environs.$platform  # environment variables and loadable modules
 
 #
 # compile mppnccombine.c, needed only if $npes > 1
