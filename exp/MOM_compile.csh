@@ -11,6 +11,11 @@ set use_netcdf4 = 0
 set environ = 1
 
 set argv = (`getopt -u -o h -l type: -l platform: -l help -l unit_testing -l debug -l use_netcdf4 -l no_environ --  $*`)
+if ($? != 0) then
+  # Die if there are incorrect options
+  set help = 1
+  goto help
+endif
 while ("$argv[1]" != "--")
     switch ($argv[1])
         case --type:
@@ -33,6 +38,7 @@ while ("$argv[1]" != "--")
     shift argv
 end
 shift argv
+help:
 if ( $help ) then
     echo "The optional arguments are:"
     echo "--type       followed by the type of the model, one of the following (default is MOM_solo):"
@@ -48,6 +54,8 @@ if ( $help ) then
     echo "--platform   followed by the platform name that has a corresponfing environ file in the ../bin dir, default is gfortran"
     echo
     echo "--use_netcdf4  use NetCDF4, the default is NetCDF4. Warning: many of the standard experiments don't work with NetCDF4."
+    echo
+    echo "--no_environ  do not source platform specific environment. Allows customising/overriding default environment"
     echo
     exit 1
 endif
