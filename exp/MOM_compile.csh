@@ -8,8 +8,9 @@ set unit_testing = 0
 set help = 0
 set debug = 0
 set use_netcdf4 = 0
+set environ = 1
 
-set argv = (`getopt -u -o h -l type: -l platform: -l help -l unit_testing -l debug -l use_netcdf4 --  $*`)
+set argv = (`getopt -u -o h -l type: -l platform: -l help -l unit_testing -l debug -l use_netcdf4 -l no_environ --  $*`)
 while ("$argv[1]" != "--")
     switch ($argv[1])
         case --type:
@@ -22,6 +23,8 @@ while ("$argv[1]" != "--")
                 set debug = 1; breaksw
         case --use_netcdf4:
                 set use_netcdf4 = 1; breaksw
+        case --no_environ:
+                set environ = 0; breaksw
         case --help:
                 set help = 1;  breaksw
         case -h:
@@ -93,7 +96,9 @@ endif
 #
 # Users must ensure the correct environment file exists for their platform.
 #
-source $root/bin/environs.$platform  # environment variables and loadable modules
+if ( $environ ) then
+  source $root/bin/environs.$platform  # environment variables and loadable modules
+endif
 
 #
 # compile mppnccombine.c, needed only if $npes > 1
