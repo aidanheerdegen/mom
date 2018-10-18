@@ -1,4 +1,4 @@
-#!/bin/csh -fx
+#!/bin/csh -f
 # Minimal compile script for fully coupled model CM2M experiments
 
 set platform      = gfortran    # A unique identifier for your platfo
@@ -11,7 +11,7 @@ set use_netcdf4 = 0
 set environ = 1
 
 set argv = (`getopt -u -o h -l type: -l platform: -l help -l unit_testing -l debug -l use_netcdf4 -l no_environ --  $*`)
-if ($? != 0) then
+if ($status != 0) then
   # Die if there are incorrect options
   set help = 1
   goto help
